@@ -2,7 +2,7 @@ using System;
 
 namespace Aoiro
 {
-    internal interface ISignal : ICanceller<SignalToken>
+    internal interface ISignal : ITargetCanceller<SignalToken>
     {
         void Cleanup();
     }

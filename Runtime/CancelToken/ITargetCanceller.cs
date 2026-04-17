@@ -1,6 +1,6 @@
 namespace Aoiro
 {
-    public interface ICanceller<T>
+    public interface ITargetCanceller<T>
     {
         void Cancel(T target);
     }

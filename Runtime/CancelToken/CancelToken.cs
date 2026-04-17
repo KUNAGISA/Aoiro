@@ -1,50 +1,59 @@
-﻿namespace Aoiro
+using System;
+
+namespace Aoiro
 {
     public static class CancelToken
     {
-        private static ICancelTokenFactory _factory = new DefaultCancelTokenFactory();
-        public static ICancelTokenFactory Factory
-        {
-            set => _factory = value ?? new DefaultCancelTokenFactory();
-        }
-
-        private sealed class NoneCancelToken : ICancelToken
-        {
-            public void Cancel() { }
-        }
-    
         public static ICancelToken None { get; } = new NoneCancelToken();
-        
-        public static CancelToken<T> Get<T>(ICanceller<T> canceller, T target)
+
+        public static ICancelToken FromCallback(Action callback)
         {
-            var token = _factory.Create<T>();
-            token.Reset(canceller, target);
-            return token;
+            return callback != null ? new CallbackCancelToken(callback) : None;
         }
 
-        public static void Release<T>(CancelToken<T> token)
+        public static ICancelToken FromTarget<T>(ITargetCanceller<T> canceller, T target)
         {
-            token.Reset(null, default);
-            _factory.Recycle(token);
+            return new TargetCancelToken<T>(canceller, target);
         }
     }
 
-    public sealed class CancelToken<T> : ICancelToken
+    internal sealed class NoneCancelToken : ICancelToken
     {
-        private ICanceller<T> _canceller = null;
+        public void Cancel() { }
+    }
+    
+    internal sealed class CallbackCancelToken : ICancelToken
+    {
+        private Action _callback = null;
+
+        public CallbackCancelToken(Action callback)
+        {
+            _callback = callback;
+        }
+
+        public void Cancel()
+        {
+            _callback?.Invoke();
+            _callback = null;
+        }
+    }
+
+    internal sealed class TargetCancelToken<T> : ICancelToken
+    {
+        private ITargetCanceller<T> _canceller = null;
         private T _target = default;
-        
-        public void Reset(ICanceller<T> canceller, T target)
+
+        public TargetCancelToken(ITargetCanceller<T> canceller, T target)
         {
             _canceller = canceller;
             _target = target;
         }
-        
+
         public void Cancel()
         {
             _canceller?.Cancel(_target);
-            _canceller = null; _target = default;
-            CancelToken.Release(this);
+            _canceller = null;
+            _target = default;
         }
     }
 }
