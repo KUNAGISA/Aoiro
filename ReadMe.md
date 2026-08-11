@@ -194,3 +194,6 @@ signal.Emit(100);
 - 一个 `Architecture` 内部应尽量保持模块职责单一，避免相互污染
 - `System` 更适合组织流程，`Model` 更适合承载状态，`Service` 更适合封装能力
 - 当不再需要整个架构实例时，可以调用 `DestroyInstance()` 释放模块与事件
+- `Instance` 在实例为空时会按需创建新架构；`DestroyInstance()` 只销毁当前实例，不提供终止状态保护
+- `MonoBehaviour.OnDestroy`、`OnDisable` 等销毁回调应尽量避免访问 `Instance`、获取模块或发送 Command/Event，优先清理自身持有的 Token、事件订阅和缓存引用
+- 销毁回调确需访问架构时使用 `TryGetInstance`；获取失败后应跳过架构操作，不得再访问 `Instance`

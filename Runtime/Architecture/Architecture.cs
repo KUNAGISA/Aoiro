@@ -40,6 +40,12 @@ namespace Aoiro
 
         public static bool Valid => _architecture != null;
 
+        public static bool TryGetInstance(out TArchitecture architecture)
+        {
+            architecture = _architecture;
+            return architecture != null;
+        }
+
         public static void MakeSureArchitecture()
         {
             if (_architecture != null)
@@ -66,16 +72,46 @@ namespace Aoiro
                 return;
             }
 
-            _architecture.OnDestroy();
-            
-            DestroyModules<ISystem>(_architecture._iocContainer);
-            DestroyModules<IModel>(_architecture._iocContainer);
-            DestroyModules<IService>(_architecture._iocContainer);
-            
-            _architecture._iocContainer.Clear();
-            _architecture._events.Clear();
+            try
+            {
+                try
+                {
+                    _architecture.OnDestroy();
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogException(exception);
+                }
 
-            _architecture = null;
+                PreShutdownModules(_architecture._iocContainer);
+                DestroyModules<ISystem>(_architecture._iocContainer);
+                DestroyModules<IModel>(_architecture._iocContainer);
+                DestroyModules<IService>(_architecture._iocContainer);
+
+                _architecture._iocContainer.Clear();
+                _architecture._events.Clear();
+            }
+            finally
+            {
+                _architecture._initialize = false;
+                _architecture = null;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void PreShutdownModules(IOCContainer ioc)
+        {
+            foreach (var module in ioc.OfTypeReverse<IArchitecturePreShutdown>())
+            {
+                try
+                {
+                    module.PreShutdown();
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogException(exception);
+                }
+            }
         }
         
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -90,7 +126,7 @@ namespace Aoiro
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void DestroyModules<T>(IOCContainer ioc) where T : class, IArchitectureModule
         {
-            foreach(var module in ioc.OfType<T>())
+            foreach(var module in ioc.OfTypeReverse<T>())
             {
                 try
                 {

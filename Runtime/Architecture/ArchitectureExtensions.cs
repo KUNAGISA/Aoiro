@@ -14,6 +14,11 @@ namespace Aoiro
         protected internal void Destroy();
     }
 
+    public interface IArchitecturePreShutdown
+    {
+        protected internal void PreShutdown();
+    }
+
     public interface ICanGetService : IBelongArchitecture { }
 
     public interface ICanGetModel : IBelongArchitecture { }
