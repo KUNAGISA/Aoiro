@@ -2,7 +2,7 @@ using System;
 
 namespace Aoiro
 {
-    public readonly struct SignalToken : IEquatable<SignalToken>
+    public readonly struct SignalToken : IEquatable<SignalToken>, ICancelToken
     {
         internal readonly ISignal Signal;
         internal readonly int Index;

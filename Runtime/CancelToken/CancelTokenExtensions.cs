@@ -10,7 +10,13 @@ namespace Aoiro
 
             private void Awake() => hideFlags = UnityEngine.HideFlags.HideAndDontSave;
 
-            public void Add(ICancelToken token) => _cancelTokens.Add(token);
+            public void Add(ICancelToken token)
+            {
+                if (token != null)
+                {
+                    _cancelTokens.Add(token);
+                }
+            }
 
             public void CancelAll()
             {
@@ -36,6 +42,11 @@ namespace Aoiro
         
         public static void CancelWhenGameObjectDestroyed(this ICancelToken self, UnityEngine.GameObject gameObject)
         {
+            if (self == null)
+            {
+                return;
+            }
+
             if (!gameObject.TryGetComponent<CancelOnDestroyTrigger>(out var trigger))
             {
                 trigger = gameObject.AddComponent<CancelOnDestroyTrigger>();
@@ -45,6 +56,11 @@ namespace Aoiro
 
         public static void CancelWhenGameObjectDisabled(this ICancelToken self, UnityEngine.GameObject gameObject)
         {
+            if (self == null)
+            {
+                return;
+            }
+
             if (!gameObject.TryGetComponent<CancelOnDisableTrigger>(out var trigger))
             {
                 trigger = gameObject.AddComponent<CancelOnDisableTrigger>();
