@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 
 namespace Aoiro
 {
@@ -27,29 +28,18 @@ namespace Aoiro
             }
         }
 
-        private struct EmitContext
-        {
-            internal int Cursor;
-            internal int End;
-        }
-        
-        private int _count = 0;
-        private SignalSlot[] _slots = null;
+        private int _count;
+        private SignalSlot[] _slots;
 
-        private EmitContext[] _emitContexts = new EmitContext[1];
-        private int _emitDepth;
+        private bool _isEmitting;
+        private int _emitCursor = InvalidIndex;
+        private int _emitEnd = InvalidIndex;
 
         private int _activeHead = InvalidIndex;
         private int _activeTail = InvalidIndex;
 
         private int _freeHead = InvalidIndex;
-        private int _retiredHead = InvalidIndex;
 
-        protected AbstractSignal(int capacity = 2)
-        {
-            _slots = new SignalSlot[capacity > 0 ? capacity : 2];
-        }
-        
         public void Cleanup()
         {
             for (var index = 0; index < _count; ++index)
@@ -59,14 +49,10 @@ namespace Aoiro
             }
             _count = 0;
             _freeHead = InvalidIndex;
-            _retiredHead = InvalidIndex;
             _activeHead = InvalidIndex;
             _activeTail = InvalidIndex;
-            for (var index = 0; index < _emitDepth; ++index)
-            {
-                _emitContexts[index].Cursor = InvalidIndex;
-                _emitContexts[index].End = InvalidIndex;
-            }
+            _emitCursor = InvalidIndex;
+            _emitEnd = InvalidIndex;
         }
         
         public SignalToken Register(T callback)
@@ -142,116 +128,113 @@ namespace Aoiro
             {
                 _activeTail = prevIndex;
             }
-            for (var index = 0; index < _emitDepth; ++index)
+            if (_isEmitting)
             {
-                ref var context = ref _emitContexts[index];
-                if (context.Cursor == token.Index)
+                if (_emitCursor == token.Index)
                 {
-                    context.Cursor = nextIndex;
+                    _emitCursor = nextIndex;
                 }
-                if (context.End == token.Index)
+                if (_emitEnd == token.Index)
                 {
-                    context.End = prevIndex;
+                    _emitEnd = prevIndex;
                 }
             }
             
             slot.Invalidate();
             slot.PrevIndex = InvalidIndex;
-            if (_emitDepth == 0)
-            {
-                slot.NextIndex = _freeHead;
-                _freeHead = token.Index;
-            }
-            else
-            {
-                slot.NextIndex = _retiredHead;
-                _retiredHead = token.Index;
-            }
+            slot.NextIndex = _freeHead;
+            _freeHead = token.Index;
         }
         
         private void EnsureCapacity()
         {
+            if (_slots == null)
+            {
+                _slots = new SignalSlot[2];
+                return;
+            }
+
             if (_count == _slots.Length)
             {
                 Array.Resize(ref _slots, _slots.Length << 1);
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected ref readonly SignalSlot GetSlot(int index)
         {
             return ref _slots[index];
         }
-        
-        protected int BeginEmit()
-        {
-            if (_emitDepth == _emitContexts.Length)
-            {
-                Array.Resize(ref _emitContexts, _emitContexts.Length << 1);
-            }
 
-            var contextIndex = _emitDepth++;
-            _emitContexts[contextIndex].Cursor = _activeHead;
-            _emitContexts[contextIndex].End = _activeTail;
-            return contextIndex;
+        protected bool HasCallback
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => _activeHead != InvalidIndex;
         }
 
-        protected bool MoveNext(int contextIndex, out int current)
+        protected bool CanSkipEmit
         {
-            ref var context = ref _emitContexts[contextIndex];
-            current = context.Cursor;
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => _activeHead == InvalidIndex && !_isEmitting;
+        }
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected void BeginEmit()
+        {
+            if (_isEmitting)
+            {
+                ThrowRecursiveEmit();
+            }
+
+            _isEmitting = true;
+            _emitCursor = _activeHead;
+            _emitEnd = _activeTail;
+        }
+
+        protected static void ThrowRecursiveEmit() => throw new InvalidOperationException("Recursive emission of the same Signal instance is not supported.");
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected bool MoveNext(out int current)
+        {
+            current = _emitCursor;
             if (current == InvalidIndex)
             {
                 return false;
             }
-            context.Cursor = _slots[current].NextIndex;
+            _emitCursor = _slots[current].NextIndex;
             return true;
         }
 
-        protected bool IsLast(int contextIndex, int current)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected bool IsLast(int current) => current == _emitEnd;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected void EndEmit()
         {
-            return current == _emitContexts[contextIndex].End;
+            _emitCursor = InvalidIndex;
+            _emitEnd = InvalidIndex;
+            _isEmitting = false;
         }
 
-        protected void EndEmit(int contextIndex)
-        {
-            if (contextIndex != _emitDepth - 1)
-            {
-                throw new InvalidOperationException("Signal emit contexts must end in stack order.");
-            }
-
-            _emitContexts[contextIndex].Cursor = InvalidIndex;
-            _emitContexts[contextIndex].End = InvalidIndex;
-            --_emitDepth;
-            if (_emitDepth == 0)
-            {
-                RecycleRetiredSlots();
-            }
-        }
-
-        private void RecycleRetiredSlots()
-        {
-            while (_retiredHead != InvalidIndex)
-            {
-                var index = _retiredHead;
-                _retiredHead = _slots[index].NextIndex;
-                _slots[index].NextIndex = _freeHead;
-                _freeHead = index;
-            }
-        }
     }
 
     public sealed class Signal : AbstractSignal<Action>
     {
         public void Emit()
         {
-            var contextIndex = BeginEmit();
+            if (CanSkipEmit)
+            {
+                return;
+            }
+            BeginEmit();
+
             try
             {
-                while (MoveNext(contextIndex, out var current))
+                while (MoveNext(out var current))
                 {
                     ref readonly var slot = ref GetSlot(current);
                     slot.Callback?.Invoke(); //有错误直接抛出，让外部调用者自己捕获
-                    if (IsLast(contextIndex, current))
+                    if (IsLast(current))
                     {
                         break;
                     }
@@ -259,7 +242,7 @@ namespace Aoiro
             }
             finally
             {
-                EndEmit(contextIndex);
+                EndEmit();
             }
         }
     }
@@ -268,14 +251,19 @@ namespace Aoiro
     {
         public void Emit(in T arg)
         {
-            var contextIndex = BeginEmit();
+            if (CanSkipEmit)
+            {
+                return;
+            }
+            BeginEmit();
+
             try
             {
-                while (MoveNext(contextIndex, out var current))
+                while (MoveNext(out var current))
                 {
                     ref readonly var slot = ref GetSlot(current);
                     slot.Callback?.Invoke(arg); //有错误直接抛出，让外部调用者自己捕获
-                    if (IsLast(contextIndex, current))
+                    if (IsLast(current))
                     {
                         break;
                     }
@@ -283,7 +271,7 @@ namespace Aoiro
             }
             finally
             {
-                EndEmit(contextIndex);
+                EndEmit();
             }
         }
     }
@@ -292,14 +280,19 @@ namespace Aoiro
     {
         public void Emit(in T1 arg1, in T2 arg2)
         {
-            var contextIndex = BeginEmit();
+            if (CanSkipEmit)
+            {
+                return;
+            }
+            BeginEmit();
+
             try
             {
-                while (MoveNext(contextIndex, out var current))
+                while (MoveNext(out var current))
                 {
                     ref readonly var slot = ref GetSlot(current);
                     slot.Callback?.Invoke(arg1, arg2); //有错误直接抛出，让外部调用者自己捕获
-                    if (IsLast(contextIndex, current))
+                    if (IsLast(current))
                     {
                         break;
                     }
@@ -307,7 +300,7 @@ namespace Aoiro
             }
             finally
             {
-                EndEmit(contextIndex);
+                EndEmit();
             }
         }
     }

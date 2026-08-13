@@ -9,21 +9,21 @@ namespace Aoiro
 
         public void Send<T>(in T e)
         {
-            if (_signals.TryGetValue(typeof(Signal<T>), out var signal))
+            if (_signals.TryGetValue(typeof(QueuedSignal<T>), out var signal))
             {
-                ((Signal<T>)signal).Emit(e);
+                ((QueuedSignal<T>)signal).Emit(e);
             }
         }
 
         public SignalToken Register<T>(Action<T> callback)
         {
-            var key = typeof(Signal<T>);
+            var key = typeof(QueuedSignal<T>);
             if (!_signals.TryGetValue(key, out var signal))
             {
-                signal = new Signal<T>();
+                signal = new QueuedSignal<T>();
                 _signals.Add(key, signal);
             }
-            return ((Signal<T>)signal).Register(callback);
+            return ((QueuedSignal<T>)signal).Register(callback);
         }
         
         public void Clear()
