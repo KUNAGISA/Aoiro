@@ -1,209 +1,213 @@
-﻿using System;
-using System.Runtime.CompilerServices;
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Aoiro
 {
-    public partial interface IArchitecture
+    public interface IArchitecture
     {
-        bool Contains<T>() where T : class;
-        void Register<T>(T instance) where T : class, IArchitectureModule;
-        void UnRegister<T>() where T : class, IArchitectureModule;
-        T Get<T>() where T : class, IArchitectureModule;
+        bool ContainsModule<T>() where T : class;
+        void RegisterModule<T>(T module) where T : class, IArchitectureModule;
+        void UnregisterModule<T>() where T : class, IArchitectureModule;
+        T GetModule<T>() where T : class, IArchitectureModule;
+        IEnumerable<TModule> EnumerateModules<TModule>() where TModule : class;
 
-        void SendCommand<TCommand>(TCommand command) where TCommand : ICommand;
+        void ExecuteCommand<TCommand>(TCommand command) where TCommand : ICommand;
+        TResult ExecuteCommand<TCommand, TResult>(TCommand command) where TCommand : ICommand<TResult>;
+        TResult ExecuteQuery<TQuery, TResult>(TQuery query) where TQuery : IQuery<TResult>;
 
-        TResult SendCommand<TCommand, TResult>(TCommand command) where TCommand : ICommand<TResult>;
-
-        TResult SendQuery<TQuery, TResult>(TQuery query) where TQuery : IQuery<TResult>;
-
-        SignalToken RegisterEvent<TEvent>(Action<TEvent> onEvent);
-        void SendEvent<TEvent>(in TEvent evt);
+        SubscriptionToken SubscribeEvent<TEvent>(Action<TEvent> callback);
+        void PublishEvent<TEvent>(in TEvent evt);
     }
 
-    public abstract partial class Architecture<TArchitecture> : IArchitecture, ICommandContext, IQueryContext where TArchitecture : Architecture<TArchitecture>, new()
+    public abstract class Architecture<TArchitecture> : IArchitecture, ICommandContext, IQueryContext where TArchitecture : Architecture<TArchitecture>, new()
     {
-        public static event Action<TArchitecture> OnRegisterPatch;
+        private static TArchitecture _instance;
 
-        private static TArchitecture _architecture = null;
+        private readonly EventBus _events = new EventBus();
+        private readonly ModuleRegistry _modules = new ModuleRegistry();
+        private readonly HashSet<IArchitectureModule> _initializedModules = new HashSet<IArchitectureModule>();
+        private bool _modulesInitialized;
+
         public static TArchitecture Instance
         {
             get
             {
-                if (_architecture == null)
-                {
-                    MakeSureArchitecture();
-                }
-                return _architecture;
+                Initialize();
+                return _instance;
             }
         }
 
-        public static bool Valid => _architecture != null;
+        public static bool IsInitialized => _instance != null && _instance._modulesInitialized;
 
         public static bool TryGetInstance(out TArchitecture architecture)
         {
-            architecture = _architecture;
+            architecture = _instance;
             return architecture != null;
         }
 
-        public static void MakeSureArchitecture()
+        public static void Initialize()
         {
-            if (_architecture != null)
+            if (_instance != null)
             {
                 return;
             }
 
-            _architecture = new TArchitecture();
-            _architecture.OnInit();
-
-            OnRegisterPatch?.Invoke(_architecture);
-
-            InitModules<IService>(_architecture._iocContainer);
-            InitModules<IModel>(_architecture._iocContainer);
-            InitModules<ISystem>(_architecture._iocContainer);
-
-            _architecture._initialize = true;
+            var architecture = new TArchitecture();
+            _instance = architecture;
+            try
+            {
+                architecture.OnInitialize();
+                InitializeModules<IService>(architecture);
+                InitializeModules<IModel>(architecture);
+                InitializeModules<ISystem>(architecture);
+                architecture._modulesInitialized = true;
+            }
+            catch
+            {
+                architecture.ShutdownCore(true);
+                _instance = null;
+                throw;
+            }
         }
 
-        public static void DestroyInstance()
+        public static void Shutdown()
         {
-            if (_architecture == null)
+            var architecture = _instance;
+            if (architecture == null)
             {
                 return;
             }
 
             try
             {
-                try
-                {
-                    _architecture.OnDestroy();
-                }
-                catch (Exception exception)
-                {
-                    Debug.LogException(exception);
-                }
-
-                PreShutdownModules(_architecture._iocContainer);
-                DestroyModules<ISystem>(_architecture._iocContainer);
-                DestroyModules<IModel>(_architecture._iocContainer);
-                DestroyModules<IService>(_architecture._iocContainer);
-
-                _architecture._iocContainer.Clear();
-                _architecture._events.Clear();
+                architecture.ShutdownCore(true);
             }
             finally
             {
-                _architecture._initialize = false;
-                _architecture = null;
+                architecture._modulesInitialized = false;
+                _instance = null;
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void PreShutdownModules(IOCContainer ioc)
+        protected abstract void OnInitialize();
+        protected abstract void OnShutdown();
+
+        IArchitecture IArchitectureProvider.GetArchitecture() => this;
+
+        public bool ContainsModule<T>() where T : class => _modules.Contains<T>();
+
+        public void RegisterModule<T>(T module) where T : class, IArchitectureModule
         {
-            foreach (var module in ioc.OfTypeReverse<IArchitecturePreShutdown>())
+            if (module == null)
+            {
+                throw new ArgumentNullException(nameof(module));
+            }
+
+            UnregisterModule<T>();
+            _modules.Register(module);
+            if (!_modulesInitialized)
+            {
+                return;
+            }
+
+            try
+            {
+                module.Initialize(this);
+                _initializedModules.Add(module);
+            }
+            catch
+            {
+                _modules.Unregister<T>(out _);
+                throw;
+            }
+        }
+
+        public void UnregisterModule<T>() where T : class, IArchitectureModule
+        {
+            if (_modules.Unregister<T>(out var module))
             {
                 try
                 {
-                    module.PreShutdown();
+                    if (_initializedModules.Contains(module))
+                    {
+                        module.Shutdown();
+                    }
                 }
-                catch (Exception exception)
+                finally
                 {
-                    Debug.LogException(exception);
+                    _initializedModules.Remove(module);
                 }
             }
         }
-        
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void InitModules<T>(IOCContainer ioc) where T : class, IArchitectureModule
+
+        public virtual T GetModule<T>() where T : class, IArchitectureModule => _modules.Get<T>();
+
+        public IEnumerable<TModule> EnumerateModules<TModule>() where TModule : class => _modules.Enumerate<TModule>();
+
+        public virtual void ExecuteCommand<TCommand>(TCommand command) where TCommand : ICommand => command.Execute(this);
+
+        public virtual TResult ExecuteCommand<TCommand, TResult>(TCommand command) where TCommand : ICommand<TResult> => command.Execute(this);
+
+        public virtual TResult ExecuteQuery<TQuery, TResult>(TQuery query) where TQuery : IQuery<TResult> => query.Execute(this);
+
+        public virtual SubscriptionToken SubscribeEvent<TEvent>(Action<TEvent> callback) => _events.Subscribe(callback);
+
+        public virtual void PublishEvent<TEvent>(in TEvent evt) => _events.Publish(evt);
+
+        private static void InitializeModules<TModule>(Architecture<TArchitecture> architecture) where TModule : class, IArchitectureModule
         {
-            foreach(var module in ioc.OfType<T>())
+            foreach (var module in architecture._modules.Enumerate<TModule>())
             {
-                module.Init();
+                module.Initialize(architecture);
+                architecture._initializedModules.Add(module);
             }
         }
-        
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void DestroyModules<T>(IOCContainer ioc) where T : class, IArchitectureModule
+
+        private void ShutdownCore(bool invokeArchitectureHook)
         {
-            foreach(var module in ioc.OfTypeReverse<T>())
+            if (invokeArchitectureHook)
             {
-                try
+                TryInvoke(OnShutdown);
+            }
+
+            foreach (var module in _modules.EnumerateReverse<IPreShutdownModule>())
+            {
+                if (module is IArchitectureModule architectureModule && _initializedModules.Contains(architectureModule))
                 {
-                    module.Destroy();
+                    TryInvoke(module.PreShutdown);
                 }
-                catch (Exception exception)
+            }
+
+            ShutdownModules<ISystem>();
+            ShutdownModules<IModel>();
+            ShutdownModules<IService>();
+            _modules.Clear();
+            _events.Clear();
+        }
+
+        private void ShutdownModules<TModule>() where TModule : class, IArchitectureModule
+        {
+            foreach (var module in _modules.EnumerateReverse<TModule>())
+            {
+                if (!_initializedModules.Remove(module))
                 {
-                    Debug.LogException(exception);
+                    continue;
                 }
-                module.SetArchitecture(null);
+                TryInvoke(module.Shutdown);
             }
         }
-        
-        private bool _initialize = false;
-        private readonly EventBus _events = new EventBus();
-        private readonly IOCContainer _iocContainer = new IOCContainer();
 
-        protected abstract void OnInit();
-        protected abstract void OnDestroy();
-
-        IArchitecture IBelongArchitecture.GetArchitecture() => this;
-
-        public bool Contains<T>() where T : class
+        private static void TryInvoke(Action action)
         {
-            return _iocContainer.Contains<T>();
-        }
-
-        public void Register<T>(T instance) where T : class, IArchitectureModule
-        {
-            UnRegister<T>();
-
-            instance.SetArchitecture(this);
-            _iocContainer.Register(instance);
-
-            if (_initialize)
+            try
             {
-                instance.Init();
+                action();
             }
-        }
-
-        public void UnRegister<T>() where T : class, IArchitectureModule
-        {
-            if (_iocContainer.UnRegister<T>(out var instance))
+            catch (Exception exception)
             {
-                instance.Destroy();
-                instance.SetArchitecture(null);
+                Debug.LogException(exception);
             }
-        }
-
-        public virtual T Get<T>() where T : class, IArchitectureModule
-        {
-            return _iocContainer.Get<T>();
-        }
-        
-        public virtual void SendCommand<TCommand>(TCommand command) where TCommand : ICommand
-        {
-            command.Execute(this);
-        }
-
-        public virtual TResult SendCommand<TCommand, TResult>(TCommand command) where TCommand : ICommand<TResult>
-        {
-            return command.Execute(this);
-        }
-
-        public virtual TResult SendQuery<TQuery, TResult>(TQuery query) where TQuery : IQuery<TResult>
-        {
-            return query.Do(this);
-        }
-
-        public virtual SignalToken RegisterEvent<TEvent>(Action<TEvent> onEvent)
-        {
-            return _events.Register(onEvent);
-        }
-        
-        public virtual void SendEvent<TEvent>(in TEvent evt)
-        {
-            _events.Send(evt);
         }
     }
 }

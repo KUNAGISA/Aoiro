@@ -1,98 +1,55 @@
-﻿using System;
+using System;
 
 namespace Aoiro
 {
-    public interface IBelongArchitecture
+    public interface IArchitectureProvider
     {
         protected internal IArchitecture GetArchitecture();
     }
 
     public interface IArchitectureModule
     {
-        protected internal void SetArchitecture(IArchitecture architecture);
-        protected internal void Init();
-        protected internal void Destroy();
+        protected internal void Initialize(IArchitecture architecture);
+        protected internal void Shutdown();
     }
 
-    public interface IArchitecturePreShutdown
+    public interface IPreShutdownModule
     {
         protected internal void PreShutdown();
     }
 
-    public interface ICanGetService : IBelongArchitecture { }
-
-    public interface ICanGetModel : IBelongArchitecture { }
-
-    public interface ICanGetSystem : IBelongArchitecture { }
-
-    public interface ICanSendCommand : IBelongArchitecture { }
-
-    public interface ICanSendQuery : IBelongArchitecture { }
-
-    public interface ICanRegisterEvent : IBelongArchitecture { }
-
-    public interface ICanSendEvent : IBelongArchitecture { }
+    public interface IServiceAccessor : IArchitectureProvider { }
+    public interface IModelAccessor : IArchitectureProvider { }
+    public interface ISystemAccessor : IArchitectureProvider { }
+    public interface ICommandExecutor : IArchitectureProvider { }
+    public interface IQueryExecutor : IArchitectureProvider { }
+    public interface IEventSubscriber : IArchitectureProvider { }
+    public interface IEventPublisher : IArchitectureProvider { }
 
     public static class ArchitectureExtensions
     {
-        public static TUtility GetService<TUtility>(this ICanGetService context) where TUtility : class, IService
-        {
-            return context.GetArchitecture().Get<TUtility>();
-        }
-        
-        public static TModel GetModel<TModel>(this ICanGetModel context) where TModel : class, IModel
-        {
-            return context.GetArchitecture().Get<TModel>();
-        }
-        
-        public static TSystem GetSystem<TSystem>(this ICanGetSystem context) where TSystem : class, ISystem
-        {
-            return context.GetArchitecture().Get<TSystem>();
-        }
-        
-        public static void SendCommand(this ICanSendCommand context, ICommand command)
-        {
-            context.GetArchitecture().SendCommand(command);
-        }
+        public static TService GetService<TService>(this IServiceAccessor context) where TService : class, IService => context.GetArchitecture().GetModule<TService>();
 
-        public static void SendCommand<TCommand>(this ICanSendCommand context, TCommand command) where TCommand : ICommand
-        {
-            context.GetArchitecture().SendCommand(command);
-        }
+        public static TModel GetModel<TModel>(this IModelAccessor context) where TModel : class, IModel => context.GetArchitecture().GetModule<TModel>();
 
-        public static TResult SendCommand<TResult>(this ICanSendCommand context, ICommand<TResult> command)
-        {
-            return context.GetArchitecture().SendCommand<ICommand<TResult>, TResult>(command);
-        }
+        public static TSystem GetSystem<TSystem>(this ISystemAccessor context) where TSystem : class, ISystem => context.GetArchitecture().GetModule<TSystem>();
 
-        public static TResult SendCommand<TCommand, TResult>(this ICanSendCommand context, TCommand command) where TCommand : struct, ICommand<TResult>
-        {
-            return context.GetArchitecture().SendCommand<TCommand, TResult>(command);
-        }
+        public static void ExecuteCommand(this ICommandExecutor context, ICommand command) => context.GetArchitecture().ExecuteCommand(command);
 
-        public static TResult SendQuery<TResult>(this ICanSendQuery context, IQuery<TResult> command)
-        {
-            return context.GetArchitecture().SendQuery<IQuery<TResult>, TResult>(command);
-        }
+        public static void ExecuteCommand<TCommand>(this ICommandExecutor context, TCommand command) where TCommand : ICommand => context.GetArchitecture().ExecuteCommand(command);
 
-        public static TResult SendQuery<TQuery, TResult>(this ICanSendQuery context, TQuery query) where TQuery : struct, IQuery<TResult>
-        {
-            return context.GetArchitecture().SendQuery<TQuery, TResult>(query);
-        }
+        public static TResult ExecuteCommand<TResult>(this ICommandExecutor context, ICommand<TResult> command) => context.GetArchitecture().ExecuteCommand<ICommand<TResult>, TResult>(command);
 
-        public static SignalToken RegisterEvent<TEvent>(this ICanRegisterEvent context, Action<TEvent> onEvent)
-        {
-            return context.GetArchitecture().RegisterEvent(onEvent);
-        }
-        
-        public static void SendEvent<TEvent>(this ICanSendEvent context) where TEvent : new()
-        {
-            context.GetArchitecture().SendEvent(new TEvent());
-        }
+        public static TResult ExecuteCommand<TCommand, TResult>(this ICommandExecutor context, TCommand command) where TCommand : struct, ICommand<TResult> => context.GetArchitecture().ExecuteCommand<TCommand, TResult>(command);
 
-        public static void SendEvent<TEvent>(this ICanSendEvent context, in TEvent evt)
-        {
-            context.GetArchitecture().SendEvent(evt);
-        }
+        public static TResult ExecuteQuery<TResult>(this IQueryExecutor context, IQuery<TResult> query) => context.GetArchitecture().ExecuteQuery<IQuery<TResult>, TResult>(query);
+
+        public static TResult ExecuteQuery<TQuery, TResult>(this IQueryExecutor context, TQuery query) where TQuery : struct, IQuery<TResult> => context.GetArchitecture().ExecuteQuery<TQuery, TResult>(query);
+
+        public static SubscriptionToken SubscribeEvent<TEvent>(this IEventSubscriber context, Action<TEvent> callback) => context.GetArchitecture().SubscribeEvent(callback);
+
+        public static void PublishEvent<TEvent>(this IEventPublisher context) where TEvent : new() => context.GetArchitecture().PublishEvent(new TEvent());
+
+        public static void PublishEvent<TEvent>(this IEventPublisher context, in TEvent evt) => context.GetArchitecture().PublishEvent(evt);
     }
 }

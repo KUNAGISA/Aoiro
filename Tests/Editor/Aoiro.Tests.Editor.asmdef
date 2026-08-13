@@ -1,0 +1,14 @@
+{
+    "name": "Aoiro.Tests.Editor",
+    "rootNamespace": "Aoiro.Tests",
+    "references": [
+        "Aoiro.Runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "autoReferenced": false
+}

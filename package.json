@@ -2,7 +2,7 @@
   "name": "com.kunagisatomo.aoiro",
   "displayName": "Aoiro",
   "description": "A lightweight runtime architecture library for Unity.",
-  "version": "3.0.3",
+  "version": "4.0.0",
   "author": {
     "name": "\u96f6",
     "email": "kunagisatomo@live.com"
