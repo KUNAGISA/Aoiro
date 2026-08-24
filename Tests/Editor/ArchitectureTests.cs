@@ -99,6 +99,13 @@ namespace Aoiro.Tests
             Assert.IsEmpty(exposed);
         }
 
+        [Test]
+        public void SystemAccessor_RequiresExplicitCapability()
+        {
+            Assert.IsFalse(typeof(ISystemAccessor).IsAssignableFrom(typeof(ISystem)));
+            Assert.IsTrue(typeof(ISystemAccessor).IsAssignableFrom(typeof(SystemWithSystemAccessor)));
+        }
+
         private sealed class TestArchitecture : Architecture<TestArchitecture>
         {
             internal static readonly List<string> Log = new List<string>();
@@ -152,6 +159,8 @@ namespace Aoiro.Tests
         {
             protected override void OnInitialize() => throw new InvalidOperationException();
         }
+
+        private sealed class SystemWithSystemAccessor : ModuleBase, ISystem, ISystemAccessor { }
 
         private readonly struct PublishCommand : ICommand
         {

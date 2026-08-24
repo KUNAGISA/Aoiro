@@ -52,7 +52,7 @@ public sealed class PlayerSystem : SystemBase
 }
 ```
 
-模块通过 `SystemBase`、`ModelBase`、`ServiceBase` 获得受限能力。框架外入口应组合 `ISystemAccessor`、`ICommandExecutor`、`IEventPublisher` 等小接口，只暴露需要的权限。
+模块通过 `SystemBase`、`ModelBase`、`ServiceBase` 获得受限能力。System 默认不能访问其他 System；存在横向 System 依赖时，应在具体类型上显式实现 `ISystemAccessor`。框架外入口也应组合 `ISystemAccessor`、`ICommandExecutor`、`IEventPublisher` 等小接口，只暴露需要的权限。
 
 ## Command 与 Query
 
