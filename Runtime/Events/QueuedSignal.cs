@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Aoiro
 {
-    public sealed class QueuedSignal<T> : IEventChannel
+    public sealed class QueuedSignal<T> : ISignal<T>, IEventChannel
     {
         private const int MaxDispatchCount = 1024;
 
@@ -49,7 +49,7 @@ namespace Aoiro
             }
         }
 
-        public void Clear()
+        public void Reset()
         {
             ++_generation;
             _pending?.Clear();

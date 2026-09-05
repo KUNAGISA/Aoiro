@@ -30,7 +30,7 @@ namespace Aoiro
         {
             foreach (var channel in _channels.Values)
             {
-                channel.Clear();
+                channel.Reset();
             }
             _channels.Clear();
         }

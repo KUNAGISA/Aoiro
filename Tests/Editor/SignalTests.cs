@@ -139,7 +139,7 @@ namespace Aoiro.Tests
             var signal = new QueuedSignal<int>();
             signal.Subscribe(value => signal.Emit(value + 1));
             Assert.Throws<InvalidOperationException>(() => signal.Emit(0));
-            signal.Clear();
+            signal.Reset();
             Assert.DoesNotThrow(() => signal.Emit(0));
         }
 

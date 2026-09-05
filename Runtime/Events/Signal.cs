@@ -3,16 +3,6 @@ using System.Runtime.CompilerServices;
 
 namespace Aoiro
 {
-    internal interface ISubscriptionSource
-    {
-        void Cancel(SubscriptionToken token);
-    }
-
-    internal interface IEventChannel
-    {
-        void Clear();
-    }
-
     public abstract class SignalBase<TDelegate> : ISubscriptionSource where TDelegate : Delegate
     {
         private const int InvalidIndex = -1;
@@ -190,7 +180,7 @@ namespace Aoiro
         }
     }
 
-    public sealed class Signal : SignalBase<Action>
+    public sealed class Signal : SignalBase<Action>, ISignal
     {
         public void Emit()
         {
@@ -217,7 +207,7 @@ namespace Aoiro
         }
     }
 
-    public sealed class Signal<T> : SignalBase<Action<T>>
+    public sealed class Signal<T> : SignalBase<Action<T>>, ISignal<T>
     {
         public void Emit(in T value)
         {
