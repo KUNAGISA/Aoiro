@@ -93,6 +93,8 @@ signal.Emit(100);
 
 `Signal` 禁止同实例重入；需要递归派发时使用 `QueuedSignal<T>`，它会按 FIFO 延后处理。EventBus 内部使用 QueuedSignal，因此同类型事件递归发布也是 FIFO。
 
+`Signal` 与 `Signal<T>` 逐个捕获订阅者的同步异常，通过 `Debug.LogException` 记录后继续通知其他订阅者，不自动取消失败订阅者，也不回滚其副作用。由订阅者触发的同实例重入异常同样被记录，外层派发继续。`QueuedSignal<T>` 在订阅者失败后继续处理排队事件；单轮超过 1024 次派发时仍清空待派发队列并抛出异常。发布者不能通过 `Emit` 是否抛出异常判断订阅者是否成功，异步回调恢复后的异常不在此隔离范围内。
+
 多字段事件使用命名结构体，不提供多参数 Signal。
 
 ## BindableProperty
@@ -105,6 +107,8 @@ level.SetValueWithoutNotify(3);
 ```
 
 比较器属于单个 BindableProperty 实例，可通过构造函数传入。对外只读暴露时使用 `IReadOnlyBindableProperty<T>`。
+
+属性更新通知遵循 Signal 的异常隔离契约。`invokeImmediately: true` 会先通知再注册订阅；立即通知失败时通过 `Debug.LogException` 记录，随后仍正常注册并返回可取消的订阅令牌。通知失败不会回滚属性值，校验应在赋值入口完成。
 
 ## 取消令牌
 

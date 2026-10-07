@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.CompilerServices;
+using UnityEngine;
 
 namespace Aoiro
 {
@@ -193,7 +194,14 @@ namespace Aoiro
             {
                 while (MoveNext(out var current))
                 {
-                    GetSlot(current).Callback?.Invoke();
+                    try
+                    {
+                        GetSlot(current).Callback?.Invoke();
+                    }
+                    catch (Exception exception)
+                    {
+                        Debug.LogException(exception);
+                    }
                     if (IsLast(current))
                     {
                         break;
@@ -220,7 +228,14 @@ namespace Aoiro
             {
                 while (MoveNext(out var current))
                 {
-                    GetSlot(current).Callback?.Invoke(value);
+                    try
+                    {
+                        GetSlot(current).Callback?.Invoke(value);
+                    }
+                    catch (Exception exception)
+                    {
+                        Debug.LogException(exception);
+                    }
                     if (IsLast(current))
                     {
                         break;

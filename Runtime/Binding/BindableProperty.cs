@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace Aoiro
 {
@@ -39,7 +40,14 @@ namespace Aoiro
             }
             if (invokeImmediately)
             {
-                callback(_value);
+                try
+                {
+                    callback(_value);
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogException(exception);
+                }
             }
             _changed ??= new Signal<T>();
             return _changed.Subscribe(callback);

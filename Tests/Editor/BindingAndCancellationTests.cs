@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace Aoiro.Tests
 {
@@ -24,6 +26,32 @@ namespace Aoiro.Tests
             Assert.AreEqual(1, insensitiveCalls);
             CollectionAssert.AreEqual(new[] { "a", "A" }, ordinalValues);
             Assert.AreEqual("B", ordinal.Value);
+        }
+
+        [Test]
+        public void BindableProperty_ImmediateCallbackExceptionStillRegistersCancellableSubscription()
+        {
+            var property = new BindableProperty<int>(1);
+            var values = new List<int>();
+            LogAssert.Expect(LogType.Exception, new Regex("InvalidOperationException: immediate notification failed"));
+            var token = property.Subscribe(value =>
+            {
+                values.Add(value);
+                if (value == 1)
+                {
+                    property.Value = 2;
+                    throw new InvalidOperationException("immediate notification failed");
+                }
+            }, true);
+
+            CollectionAssert.AreEqual(new[] { 1 }, values);
+            Assert.AreEqual(2, property.Value);
+            property.Value = 3;
+            token.Cancel();
+            property.Value = 4;
+
+            CollectionAssert.AreEqual(new[] { 1, 3 }, values);
+            Assert.AreEqual(4, property.Value);
         }
 
         [Test]
