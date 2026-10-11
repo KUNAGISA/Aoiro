@@ -1,6 +1,5 @@
 using System;
 using System.Runtime.CompilerServices;
-using UnityEngine;
 
 namespace Aoiro
 {
@@ -200,7 +199,7 @@ namespace Aoiro
                     }
                     catch (Exception exception)
                     {
-                        Debug.LogException(exception);
+                        AoiroLog.LogException(exception);
                     }
                     if (IsLast(current))
                     {
@@ -234,7 +233,7 @@ namespace Aoiro
                     }
                     catch (Exception exception)
                     {
-                        Debug.LogException(exception);
+                        AoiroLog.LogException(exception);
                     }
                     if (IsLast(current))
                     {

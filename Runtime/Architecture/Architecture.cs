@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine;
 
 namespace Aoiro
 {
@@ -206,7 +205,7 @@ namespace Aoiro
             }
             catch (Exception exception)
             {
-                Debug.LogException(exception);
+                AoiroLog.LogException(exception);
             }
         }
     }
